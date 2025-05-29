@@ -1,0 +1,180 @@
+# Example application connecting to CloudSQL via Auth Proxy
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+  namespace: default
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web-app
+  template:
+    metadata:
+      labels:
+        app: web-app
+    spec:
+      serviceAccountName: cloudsql-proxy  # Use Workload Identity
+      containers:
+      - name: web-app
+        image: your-app:latest
+        env:
+        # Database connection using CloudSQL proxy service
+        - name: DATABASE_URL
+          value: "postgresql://app:$(APP_PASSWORD)@nonprod-cloudsql-proxy.default.svc.cluster.local:5432/app"
+        - name: APP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nonprod-cloudsql-credentials
+              key: app-password
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+---
+# Example application connecting to AlloyDB via Auth Proxy
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-app
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: analytics-app
+  template:
+    metadata:
+      labels:
+        app: analytics-app
+    spec:
+      serviceAccountName: alloydb-proxy  # Use Workload Identity
+      containers:
+      - name: analytics-app
+        image: your-analytics-app:latest
+        env:
+        # Database connection using AlloyDB proxy service
+        - name: DATABASE_URL
+          value: "postgresql://readonly:$(READONLY_PASSWORD)@nonprod-alloydb-proxy.default.svc.cluster.local:5432/postgres"
+        - name: READONLY_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nonprod-alloydb-credentials
+              key: readonly-password
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+
+---
+# Database migration job example
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migration
+  namespace: default
+spec:
+  template:
+    spec:
+      serviceAccountName: cloudsql-proxy
+      restartPolicy: Never
+      containers:
+      - name: migrate
+        image: migrate/migrate:latest
+        args:
+        - "-path=/migrations"
+        - "-database=$(DATABASE_URL)"
+        - "up"
+        env:
+        - name: DATABASE_URL
+          value: "postgresql://app:$(APP_PASSWORD)@nonprod-cloudsql-proxy.default.svc.cluster.local:5432/app?sslmode=require"
+        - name: APP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nonprod-cloudsql-credentials
+              key: app-password
+        volumeMounts:
+        - name: migrations
+          mountPath: /migrations
+          readOnly: true
+      volumes:
+      - name: migrations
+        configMap:
+          name: db-migrations
+
+---
+# Connection pooling with PgBouncer example
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgbouncer
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: pgbouncer
+  template:
+    metadata:
+      labels:
+        app: pgbouncer
+    spec:
+      containers:
+      - name: pgbouncer
+        image: pgbouncer/pgbouncer:latest
+        env:
+        - name: DATABASES_HOST
+          value: "nonprod-cloudsql-proxy.default.svc.cluster.local"
+        - name: DATABASES_PORT
+          value: "5432"
+        - name: DATABASES_USER
+          value: "app"
+        - name: DATABASES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nonprod-cloudsql-credentials
+              key: app-password
+        - name: DATABASES_DBNAME
+          value: "app"
+        - name: POOL_MODE
+          value: "transaction"
+        - name: MAX_CLIENT_CONN
+          value: "100"
+        - name: DEFAULT_POOL_SIZE
+          value: "25"
+        ports:
+        - containerPort: 5432
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+
+---
+# Service for PgBouncer
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgbouncer
+  namespace: default
+spec:
+  selector:
+    app: pgbouncer
+  ports:
+  - port: 5432
+    targetPort: 5432
+    protocol: TCP
+  type: ClusterIP

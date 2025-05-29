@@ -1,0 +1,249 @@
+# Terraform State Configuration
+terraform_state_bucket = "your-prod-terraform-state-bucket"
+
+# Project Configuration
+host_project_id     = "your-prod-host-project-id"
+service_project_ids = ["your-prod-service-project-1", "your-prod-service-project-2"]
+region             = "europe-west2"
+
+# Network Configuration
+network_name = "prod-shared-vpc"
+
+# Production Clusters Configuration
+clusters = {
+  primary = {
+    project_id              = "your-prod-service-project-1"
+    cluster_name            = "prod-primary-cluster"
+    location               = "europe-west2"
+    subnet_key             = "primary"
+    kubernetes_version     = "1.28"
+    release_channel        = "STABLE"
+    deletion_protection    = true
+    enable_private_endpoint = true
+    master_ipv4_cidr_block = "172.17.0.0/28"
+    authorized_networks = [
+      {
+        cidr_block   = "10.0.0.0/8"
+        display_name = "Internal networks"
+      },
+      {
+        cidr_block   = "YOUR_BASTION_HOST_IP/32"
+        display_name = "Bastion host"
+      }
+    ]
+    cluster_secondary_range_name  = "pods"
+    services_secondary_range_name = "services"
+    service_account_name   = "prod-gke-sa"
+    service_account_roles  = []
+    usage_metering_dataset_id = "your-bigquery-dataset-id"
+    node_pools = {
+      system = {
+        initial_node_count = 1
+        autoscaling = {
+          min_node_count = 3
+          max_node_count = 6
+        }
+        upgrade_settings = {
+          node_pool_soak_duration = "900s"
+          batch_node_count        = 1
+          batch_soak_duration     = "600s"
+        }
+        node_config = {
+          image_type                     = "COS_CONTAINERD"
+          machine_type                   = "e2-standard-4"
+          spot                          = false
+          gcfs_enabled                  = true
+          gvnic_enabled                 = true
+          secure_boot_enabled           = true
+          integrity_monitoring_enabled   = true
+          labels                        = { environment = "prod", pool = "system" }
+          tags                          = ["prod", "gke-node", "system"]
+          taints = [
+            {
+              key    = "node-pool"
+              value  = "system"
+              effect = "NO_SCHEDULE"
+            }
+          ]
+        }
+      }
+      workload = {
+        initial_node_count = 2
+        autoscaling = {
+          min_node_count = 3
+          max_node_count = 15
+        }
+        upgrade_settings = {
+          node_pool_soak_duration = "900s"
+          batch_node_count        = 2
+          batch_soak_duration     = "600s"
+        }
+        node_config = {
+          image_type                     = "COS_CONTAINERD"
+          machine_type                   = "e2-standard-8"
+          spot                          = false
+          gcfs_enabled                  = true
+          gvnic_enabled                 = true
+          secure_boot_enabled           = true
+          integrity_monitoring_enabled   = true
+          labels                        = { environment = "prod", pool = "workload" }
+          tags                          = ["prod", "gke-node", "workload"]
+          taints                        = []
+        }
+      }
+    }
+  }
+}
+
+# Production Kafka Configuration
+enable_kafka = true
+kafka_config = {
+  namespace        = "kafka"
+  strimzi_version = "0.38.0"
+  cluster_name    = "prod-kafka"
+  kafka_version   = "3.6.0"
+  replicas        = 3
+  storage_size    = "200Gi"
+  storage_class   = "ssd"
+  enable_connect  = true
+  topics = {
+    events = {
+      partitions = 12
+      replicas   = 3
+      config = {
+        "retention.ms"           = "604800000"
+        "min.insync.replicas"   = "2"
+        "unclean.leader.election.enable" = "false"
+      }
+    }
+    metrics = {
+      partitions = 6
+      replicas   = 3
+      config = {
+        "retention.ms"           = "259200000"
+        "min.insync.replicas"   = "2"
+        "cleanup.policy"        = "compact"
+      }
+    }
+  }
+  users = {
+    app-producer = {
+      authentication_type = "tls"
+      acls = [
+        {
+          resource = {
+            type        = "topic"
+            name        = "events"
+            patternType = "literal"
+          }
+          operation = "Write"
+          host      = "*"
+        }
+      ]
+    }
+    app-consumer = {
+      authentication_type = "tls"
+      acls = [
+        {
+          resource = {
+            type        = "topic"
+            name        = "events"
+            patternType = "literal"
+          }
+          operation = "Read"
+          host      = "*"
+        }
+      ]
+    }
+  }
+}
+
+# Production Vault Configuration
+enable_vault = true
+vault_config = {
+  namespace               = "vault"
+  cluster_name           = "prod-vault"
+  kms_location           = "europe-west2"
+  bank_vaults_version    = "1.20.0"
+  replicas               = 3
+  ha_enabled             = true
+  enable_workload_identity = true
+  monitoring_enabled     = true
+  ingress_enabled        = false
+  ingress_hosts          = []
+  ingress_tls           = []
+}
+
+# Production CloudSQL Configuration
+enable_cloudsql = true
+cloudsql_config = {
+  instance_name       = "prod-cloudsql"
+  database_version   = "POSTGRES_15"
+  tier              = "db-custom-4-15360"  # 4 vCPU, 15GB RAM
+  availability_type = "REGIONAL"           # High availability
+  disk_size         = 200
+  k8s_namespace     = "production"
+  databases         = ["app"]
+  users = {
+    app = {
+      password = null  # Will be auto-generated
+      password_policy = {
+        allowed_failed_attempts      = 5
+        password_expiration_duration = "2160h"  # 90 days
+        enable_failed_attempts_check = true
+        enable_password_verification = true
+      }
+    }
+    readonly = {
+      password = null  # Will be auto-generated
+      password_policy = {
+        allowed_failed_attempts      = 5
+        password_expiration_duration = "2160h"  # 90 days
+        enable_failed_attempts_check = true
+        enable_password_verification = true
+      }
+    }
+  }
+  deploy_proxy        = true
+  deletion_protection = true
+}
+
+# Production AlloyDB Configuration (Alternative to CloudSQL)
+# Note: Choose either CloudSQL or AlloyDB, not both
+enable_alloydb = false
+alloydb_config = {
+  cluster_id       = "prod-alloydb"
+  database_version = "POSTGRES_15"
+  display_name     = "Production AlloyDB Cluster"
+  k8s_namespace    = "production"
+  primary_instance = {
+    cpu_count               = 8
+    availability_type       = "REGIONAL"
+    database_flags         = {
+      "shared_preload_libraries" = "pg_stat_statements"
+      "log_statement"           = "all"
+      "log_min_duration_statement" = "1000"
+    }
+    read_pool_node_count   = 2
+  }
+  read_replica_count = 2
+  read_replica_config = {
+    cpu_count               = 4
+    availability_type       = "ZONAL"
+    database_flags         = {}
+    read_pool_node_count   = 1
+  }
+  users = {
+    app = {
+      user_type      = "ALLOYDB_BUILT_IN"
+      password       = null  # Will be auto-generated
+      database_roles = ["pg_read_all_data", "pg_write_all_data"]
+    }
+    readonly = {
+      user_type      = "ALLOYDB_BUILT_IN"
+      password       = null  # Will be auto-generated
+      database_roles = ["pg_read_all_data"]
+    }
+  }
+  deploy_proxy = true
+}
