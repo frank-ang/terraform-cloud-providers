@@ -1,0 +1,242 @@
+# Kubernetes API Groups and Resources Configuration
+# This file documents the supported Kubernetes APIs and configurations
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k8s-api-allowlist
+  namespace: kube-system
+data:
+  # Core API Groups
+  core-apis: |
+    - apiVersion: v1
+      resources:
+        - pods
+        - services
+        - configmaps
+        - secrets
+        - persistentvolumes
+        - persistentvolumeclaims
+        - serviceaccounts
+        - namespaces
+        - endpoints
+        - events
+
+  # RBAC API Group
+  rbac-apis: |
+    - apiVersion: rbac.authorization.k8s.io/v1
+      resources:
+        - roles
+        - rolebindings
+        - clusterroles
+        - clusterrolebindings
+
+  # Networking API Group
+  networking-apis: |
+    - apiVersion: networking.k8s.io/v1
+      resources:
+        - networkpolicies
+        - ingresses
+        - ingressclasses
+
+  # Apps API Group
+  apps-apis: |
+    - apiVersion: apps/v1
+      resources:
+        - deployments
+        - replicasets
+        - daemonsets
+        - statefulsets
+
+  # Policy API Group
+  policy-apis: |
+    - apiVersion: policy/v1beta1
+      resources:
+        - podsecuritypolicies
+        - poddisruptionbudgets
+
+  # Autoscaling API Group
+  autoscaling-apis: |
+    - apiVersion: autoscaling/v2
+      resources:
+        - horizontalpodautoscalers
+
+  # Storage API Group
+  storage-apis: |
+    - apiVersion: storage.k8s.io/v1
+      resources:
+        - storageclasses
+        - volumeattachments
+
+  # Custom Resource Definitions
+  crd-apis: |
+    - apiVersion: apiextensions.k8s.io/v1
+      resources:
+        - customresourcedefinitions
+
+  # Kafka Strimzi APIs
+  kafka-apis: |
+    - apiVersion: kafka.strimzi.io/v1beta2
+      resources:
+        - kafkas
+        - kafkatopics
+        - kafkausers
+        - kafkaconnects
+        - kafkaconnectors
+        - kafkamirrormakers
+        - kafkarebalances
+
+  # Vault Bank Vaults APIs
+  vault-apis: |
+    - apiVersion: vault.banzaicloud.com/v1alpha1
+      resources:
+        - vaults
+        - externalvaults
+
+  # Metrics and Monitoring APIs
+  metrics-apis: |
+    - apiVersion: metrics.k8s.io/v1beta1
+      resources:
+        - nodes
+        - pods
+    - apiVersion: monitoring.coreos.com/v1
+      resources:
+        - servicemonitors
+        - prometheusrules
+        - alertmanagers
+        - prometheuses
+
+  # Certificate Management APIs
+  cert-manager-apis: |
+    - apiVersion: cert-manager.io/v1
+      resources:
+        - certificates
+        - certificaterequests
+        - issuers
+        - clusterissuers
+
+---
+# API Server Configuration for allowed APIs
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-server-config
+  namespace: kube-system
+data:
+  admission-controllers: |
+    # Production Admission Controllers
+    - NamespaceLifecycle
+    - LimitRanger
+    - ServiceAccount
+    - DefaultStorageClass
+    - DefaultTolerationSeconds
+    - MutatingAdmissionWebhook
+    - ValidatingAdmissionWebhook
+    - ResourceQuota
+    - NodeRestriction
+    - PodSecurityPolicy  # Production only
+    - PodNodeSelector
+    - AlwaysPullImages   # Production only
+
+  feature-gates: |
+    # Enabled Feature Gates
+    PodSecurityPolicy: true          # Production security
+    NetworkPolicy: true              # Network isolation
+    VolumeSnapshotDataSource: true   # Volume snapshots
+    CSIDriverRegistry: true          # CSI drivers
+    EphemeralContainers: false       # Disabled for security
+
+  runtime-config: |
+    # Enabled API Versions
+    api/all: true
+    networking.k8s.io/v1: true
+    policy/v1beta1: true
+    rbac.authorization.k8s.io/v1: true
+    autoscaling/v2: true
+    storage.k8s.io/v1: true
+
+---
+# Network Policy Template for API Access
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-server-access
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      component: kube-apiserver
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    - podSelector:
+        matchLabels:
+          app: kubectl-proxy
+    ports:
+    - protocol: TCP
+      port: 6443
+  egress:
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+
+---
+# RBAC Configuration for API Access
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: api-access-manager
+rules:
+# Core API access
+- apiGroups: [""]
+  resources: ["*"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Apps API access
+- apiGroups: ["apps"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# RBAC API access
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Networking API access
+- apiGroups: ["networking.k8s.io"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Policy API access
+- apiGroups: ["policy"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Storage API access
+- apiGroups: ["storage.k8s.io"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Kafka API access
+- apiGroups: ["kafka.strimzi.io"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Vault API access
+- apiGroups: ["vault.banzaicloud.com"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Metrics API access
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["*"]
+  verbs: ["get", "list"]
+# Monitoring API access
+- apiGroups: ["monitoring.coreos.com"]
+  resources: ["*"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

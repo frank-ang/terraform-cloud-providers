@@ -1,0 +1,145 @@
+# Terraform State Configuration
+terraform_state_bucket = "your-terraform-state-bucket"
+
+# Project Configuration
+host_project_id     = "your-host-project-id"
+service_project_ids = ["your-service-project-1", "your-service-project-2"]
+region             = "europe-west2"
+
+# Network Configuration
+network_name = "nonprod-shared-vpc"
+
+# Clusters Configuration - Update project_ids
+clusters = {
+  primary = {
+    project_id              = "your-service-project-1"
+    cluster_name            = "nonprod-primary-cluster"
+    location               = "europe-west2"
+    subnet_key             = "primary"
+    kubernetes_version     = "1.28"
+    release_channel        = "REGULAR"
+    deletion_protection    = false
+    enable_private_endpoint = false
+    master_ipv4_cidr_block = "172.16.0.0/28"
+    authorized_networks = [
+      {
+        cidr_block   = "0.0.0.0/0"
+        display_name = "Allow all (nonprod only)"
+      }
+    ]
+    cluster_secondary_range_name  = "pods"
+    services_secondary_range_name = "services"
+    service_account_name   = "nonprod-gke-sa"
+    service_account_roles  = []
+    node_pools = {
+      default = {
+        initial_node_count = 0
+        autoscaling = {
+          min_node_count = 1
+          max_node_count = 5
+        }
+        upgrade_settings = {
+          node_pool_soak_duration = "600s"
+          batch_node_count        = 2
+          batch_soak_duration     = "300s"
+        }
+        node_config = {
+          image_type                     = "COS_CONTAINERD"
+          machine_type                   = "e2-standard-2"
+          spot                          = false
+          gcfs_enabled                  = true
+          gvnic_enabled                 = true
+          secure_boot_enabled           = true
+          integrity_monitoring_enabled   = true
+          labels                        = { environment = "nonprod" }
+          tags                          = ["nonprod", "gke-node"]
+          taints                        = []
+        }
+      }
+    }
+  }
+}
+
+# Optional: Enable Kafka
+enable_kafka = true
+kafka_config = {
+  namespace        = "kafka"
+  strimzi_version = "0.38.0"
+  cluster_name    = "nonprod-kafka"
+  kafka_version   = "3.6.0"
+  replicas        = 1
+  storage_size    = "50Gi"
+  storage_class   = "standard-rwo"
+  enable_connect  = false
+  topics = {
+    test-topic = {
+      partitions = 3
+      replicas   = 1
+      config = {
+        "retention.ms" = "604800000"
+      }
+    }
+  }
+  users = {}
+}
+
+# Optional: Enable Vault
+enable_vault = true
+vault_config = {
+  namespace               = "vault"
+  cluster_name           = "nonprod-vault"
+  kms_location           = "europe-west2"
+  bank_vaults_version    = "1.20.0"
+  replicas               = 1
+  ha_enabled             = false
+  enable_workload_identity = true
+  monitoring_enabled     = true
+}
+
+# Optional: Enable CloudSQL PostgreSQL
+enable_cloudsql = true
+cloudsql_config = {
+  instance_name       = "nonprod-cloudsql"
+  database_version   = "POSTGRES_15"
+  tier              = "db-custom-1-3840"
+  availability_type = "ZONAL"
+  disk_size         = 50
+  k8s_namespace     = "default"
+  databases         = ["app", "test"]
+  users = {
+    app = {
+      password        = null  # Will be auto-generated
+      password_policy = null
+    }
+    test = {
+      password        = null  # Will be auto-generated  
+      password_policy = null
+    }
+  }
+  deploy_proxy        = true
+  deletion_protection = false
+}
+
+# Optional: Enable AlloyDB (Alternative to CloudSQL)
+# Note: Choose either CloudSQL or AlloyDB, not both
+enable_alloydb = false
+alloydb_config = {
+  cluster_id       = "nonprod-alloydb"
+  database_version = "POSTGRES_15"
+  display_name     = "Non-Prod AlloyDB Cluster"
+  k8s_namespace    = "default"
+  primary_instance = {
+    cpu_count               = 2
+    availability_type       = "ZONAL"
+    database_flags         = {}
+    read_pool_node_count   = 0
+  }
+  users = {
+    app = {
+      user_type      = "ALLOYDB_BUILT_IN"
+      password       = null  # Will be auto-generated
+      database_roles = []
+    }
+  }
+  deploy_proxy = true
+}
