@@ -71,7 +71,7 @@ module "eks" {
 
   subnet_ids = var.private_subnet_ids
 
-  # Disable cluster secrets encryption, to workaround KMS MalformedPolicyDocumentException: The new key policy will not allow you to update the key policy in the future.
+  # Disable cluster secrets encryption, to workaround KMS MalformedPolicyDocumentException: "The new key policy will not allow you to update the key policy in the future."
   encryption_config = null
   create_kms_key = false
 

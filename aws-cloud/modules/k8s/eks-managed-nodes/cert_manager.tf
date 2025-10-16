@@ -7,8 +7,8 @@ module "cert_manager_irsa_role" {
   depends_on = [ module.eks ]
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
   version = "6.2.1"
-  name                  = "${var.project}-cert-manager"
-  attach_cert_manager_policy = true
+  name    = "${var.project}-cert-manager"
+  attach_cert_manager_policy    = true
   cert_manager_hosted_zone_arns = [var.route53_private_zone_arn]
   oidc_providers = {
     main = {
@@ -19,10 +19,11 @@ module "cert_manager_irsa_role" {
 }
 
 resource "helm_release" "cert_manager" {
-  depends_on = [ null_resource.kubectl ]
+  depends_on = [ null_resource.kubectl, module.cert_manager_irsa_role ]
   name       = "cert-manager"
   repository = "https://charts.jetstack.io"
   chart      = "cert-manager"
+  version    = "v1.19.0"
   namespace  = "cert-manager"
   create_namespace = true
 
@@ -40,7 +41,7 @@ resource "helm_release" "cert_manager" {
       value = module.cert_manager_irsa_role.arn
     },
     {
-      name  = "installCRDs"
+      name  = "crds.enabled"
       value = true
     },
     # to solve this error: "propagation check failed" err="NS ns-1024.awsdns-00.org.:53 returned REFUSED

@@ -15,7 +15,7 @@ module "aws_load_balancer_controller_irsa_role" {
 
 resource "helm_release" "aws_load_balancer_controller" {
   depends_on = [
-    null_resource.kubectl #, module.aws_load_balancer_controller_irsa_role
+    null_resource.kubectl , module.aws_load_balancer_controller_irsa_role, helm_release.cert_manager
   ]
   name       = "aws-load-balancer-controller"
   repository = "https://aws.github.io/eks-charts"

@@ -1,6 +1,6 @@
-# AWS Cloud Platform for Thought Machine Vault Core ![Tested](https://img.shields.io/badge/VaultCore5.7-in_progress-yellow)
+# AWS Cloud Platform for Thought Machine Vault Core
 
-Terraform templates to provision AWS Cloud infrastructure prerequisites necessary for deployment of the Thought Machine Vault Core banking platform. A prescriptive infrastructure is 
+Terraform templates to provision AWS Cloud infrastructure prerequisites necessary for deployment of the Thought Machine Vault Core banking platform.
 
 ## Architecture Overview
 
@@ -56,12 +56,14 @@ aws-cloud/
 
 ### Configure
 
-Configure `terraform.tfvars` in the selected [environments](./environments)/ENV_NAME subdirectory.
+Configure the environment in `terraform.tfvars` [example](./environments/nonprod/terraform.tfvars.example) in the selected [environments](./environments)/ENV_NAME subdirectory.
+
+Configure the Terraform state S3 bucket in `backend.tfvars` [example](./environments/nonprod/backend.tfvars.example).
 
 ### Create Environment
 
 ```sh
-terraform init
+terraform init -upgrade -backend-config=backend.tfvars
 terraform plan
 terraform apply
 ```
@@ -70,9 +72,9 @@ terraform apply
 
 Please refer to Thought Machine Vault Core documentation.
 
-### Destroy Environment (optional)
+### Destroy Environment
 
-To deprovision a temporary environment.
+To deprovision a temporary nonprod environment.
 
 ```sh
 terraform destroy

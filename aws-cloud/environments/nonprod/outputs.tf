@@ -46,15 +46,15 @@ output "vault_installer_role_arn" {
 }
 
 output "msk_sasl_scram_cmk_arn" {
-  value = length(module.kafka) > 0 ? module.kafka[0].msk_sasl_scram_cmk_arn : null
+  value = module.kafka.msk_sasl_scram_cmk_arn
 }
 
 output "msk_cluster_arn" {
-  value = length(module.kafka) > 0 ? module.kafka[0].msk_cluster_arn : null
+  value = module.kafka.msk_cluster_arn
 }
 
 output "bootstrap_brokers_sasl_scram" {
-  value = length(module.kafka) > 0 ? module.kafka[0].bootstrap_brokers_sasl_scram : null
+  value = module.kafka.bootstrap_brokers_sasl_scram
 }
 
 output "sm_role_permissions_boundary_arn" {
