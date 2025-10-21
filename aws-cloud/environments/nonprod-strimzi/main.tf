@@ -80,11 +80,12 @@ resource "random_password" "db_password" {
 }
 
 module "kafka" {
-  source                = "../../modules/kafka/aws-msk"
+  source                = "../../modules/kafka/strimzi"
   project               = var.project
+  project_domain        = var.project_domain
   owner                 = var.owner
   aws_region            = var.aws_region
   aws_profile           = var.aws_profile
-  private_subnet_ids    = module.network.private_subnets
-  app_security_group_id = module.eks.node_security_group_id
+  ingress_class_name    = module.eks.ingress_class_name
+  cert_manager_selfsigned_cluster_issuer = module.eks.cert_manager_selfsigned_cluster_issuer
 }

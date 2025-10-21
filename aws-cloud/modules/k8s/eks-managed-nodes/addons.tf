@@ -1,4 +1,5 @@
 module "vpc_cni_irsa" {
+  # depends_on = [ null_resource.kubectl ]
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
   name = "vpc-cni"
   attach_vpc_cni_policy = true
@@ -18,6 +19,7 @@ resource "aws_eks_addon" "vpc_cni" {
 }
 
 module "ebs_csi_irsa" {
+  # depends_on = [ null_resource.kubectl ]
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
   name = "ebs-csi"
   attach_ebs_csi_policy = true
@@ -54,6 +56,7 @@ resource "aws_eks_addon" "external_dns" {
 }
 
 module "external_dns_irsa" {
+  # depends_on = [ null_resource.kubectl ]
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
   name = "external-dns"
   attach_external_dns_policy    = true
