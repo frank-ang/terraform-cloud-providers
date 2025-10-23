@@ -14,7 +14,10 @@ Once you have cloned the repo, go the specific area for you Cloud Provider and y
 
 ## Google Cloud
 
-[Resources](/google-cloud/) - terraform resources
-[Readme](/google-cloud/README.md) - guide on getting started
+[google-cloud](/google-cloud/) - Terraform resources and guide on getting started.
 
 Please ensure you update the tfvars file before running as this will contain the configuration required for your environment.
+
+## AWS Cloud
+
+[aws-cloud](/aws-cloud/) - Terraform resources and guide on getting started.
