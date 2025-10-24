@@ -18,7 +18,7 @@ variable "owner" {
   type = string
 }
 
-variable ingress_class_name {
+variable ingress_class_name { # DEPRECATED
   type = string
 }
 

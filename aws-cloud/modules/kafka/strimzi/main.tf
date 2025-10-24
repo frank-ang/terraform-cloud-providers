@@ -144,10 +144,16 @@ spec:
         authentication:
           type: scram-sha-512
         configuration:
-          class: ${var.ingress_class_name}
+          class: ${local.ingress_nginx_ingress_class}
           bootstrap:
-            host: ${local.kafka_bootstrap_hostname}
+            alternativeNames:
+            - kafka
+            - ${local.kafka_name}-kafka-bootstrap.${local.kafka_namespace}.svc.cluster.local
+            - ${local.kafka_bootstrap_hostname}
             annotations:
+              kubernetes.io/ingress.class: ${local.ingress_nginx_ingress_class}
+              external-dns.alpha.kubernetes.io/hostname: ${local.kafka_bootstrap_hostname}
+            host: ${local.kafka_bootstrap_hostname}
           brokers:
           - broker: 0
             host: ${local.kafka_broker_hostnames[0]}
@@ -192,8 +198,8 @@ EOF
 # test sasl scram 
 # nosemgrep: resource-not-on-allowlist
 resource "kubectl_manifest" "kafka_test_sasl_secret" {
-  count = 0
-  depends_on      = [helm_release.strimzi]
+  count = 1
+  depends_on      = [ kubectl_manifest.kafka_cluster ]
   yaml_body = <<-EOF
 apiVersion: v1
 kind: Secret
@@ -212,7 +218,7 @@ resource "time_sleep" "kafka_test_sasl_secret_wait" {
 
 # nosemgrep: resource-not-on-allowlist
 resource "kubectl_manifest" "kafka_test_sasl_secret_kafkauser" {
-  count = 0
+  count = 1
   depends_on = [time_sleep.kafka_test_sasl_secret_wait]
   yaml_body  = <<-EOF
 apiVersion: kafka.strimzi.io/v1beta2

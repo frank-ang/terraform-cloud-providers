@@ -102,7 +102,7 @@ module "eks" {
     "${var.project}-on" = {
       min_size       = 1
       max_size       = 10
-      desired_size   = 4
+      desired_size   = 3
       instance_types = ["m6a.2xlarge", "m5a.2xlarge", "m5.2xlarge", "c6a.2xlarge", "c5a.2xlarge", "c5.2xlarge"]
       capacity_type  = "ON_DEMAND"
       labels = {
