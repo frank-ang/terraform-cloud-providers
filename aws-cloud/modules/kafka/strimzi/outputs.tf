@@ -11,5 +11,5 @@ output "strimzi_kafka_tls_cert_path" {
 }
 
 output "bootstrap_brokers_sasl_scram" {
-  value = "TODO"
+  value = "${local.kafka_name}-kafka-bootstrap.${local.kafka_namespace}.svc.cluster.local:9097"
 }

@@ -91,7 +91,7 @@ spec:
               service:
                 name: ${local.kafka_name}-kafka-external-bootstrap
                 port:
-                  number: 9097
+                  number: ${local.kafka_external_port}
             path: /
             pathType: Prefix
   tls:

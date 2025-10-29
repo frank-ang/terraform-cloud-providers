@@ -154,6 +154,10 @@ spec:
               kubernetes.io/ingress.class: ${local.ingress_nginx_ingress_class}
               external-dns.alpha.kubernetes.io/hostname: ${local.kafka_bootstrap_hostname}
             host: ${local.kafka_bootstrap_hostname}
+          brokerCertChainAndKey:
+            secretName: ${local.kafka_broker_internal_cert}
+            certificate: tls.crt
+            key: tls.key
           brokers:
           - broker: 0
             host: ${local.kafka_broker_hostnames[0]}
@@ -167,10 +171,6 @@ spec:
             host:  ${local.kafka_broker_hostnames[2]}
             annotations:
               external-dns.alpha.kubernetes.io/hostname: ${local.kafka_broker_hostnames[2]}
-          brokerCertChainAndKey:
-            secretName: ${local.kafka_broker_internal_cert}
-            certificate: tls.crt
-            key: tls.key
     config:
       message.max.bytes: 4194304
       replica.fetch.max.bytes: 5242880
