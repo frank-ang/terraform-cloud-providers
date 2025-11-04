@@ -22,6 +22,13 @@ locals {
     db_secrets_value = {
         "${var.database_hostname}" = var.database_password
     }
+    dummy_saml_idp_secrets_name = "dummy-saml-idp-secrets"
+    dummy_saml_idp_secrets_value = {
+      default = {
+        basic_auth_user     = var.dummy_saml_idp_basic_auth_user
+        basic_auth_password = var.dummy_saml_idp_basic_auth_password
+      }
+    }
     aws_account_id = data.aws_caller_identity.main.account_id
 }
 
@@ -44,6 +51,18 @@ resource "aws_secretsmanager_secret" "root_db_secret" {
 resource "aws_secretsmanager_secret_version" "root_db_secret" {
   secret_id     = aws_secretsmanager_secret.root_db_secret.id
   secret_string = jsonencode(local.db_secrets_value)
+}
+
+# dummy idp password
+resource "aws_secretsmanager_secret" "dummy_saml_idp" {
+  name                    = "${var.tm_iam_prefix}/${var.secret_prefix}/${local.dummy_saml_idp_secrets_name}"
+  description             = "For SAML authentication. The values must match common.basic_auth.password and common.basic_auth.username in the prepared values.yaml"
+  recovery_window_in_days = 0
+}
+
+resource "aws_secretsmanager_secret_version" "dummy_saml_idp" {
+  secret_id     = aws_secretsmanager_secret.dummy_saml_idp.id
+  secret_string = jsonencode(local.dummy_saml_idp_secrets_value)
 }
 
 module "irsa_vault_installer" {

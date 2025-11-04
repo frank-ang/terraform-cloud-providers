@@ -66,6 +66,6 @@ kind: ClusterIssuer
 metadata:
   name: ${local.cert_manager_selfsigned_cluster_issuer}
 spec:
- selfSigned: {}
+  selfSigned: {}
 YAML
 }

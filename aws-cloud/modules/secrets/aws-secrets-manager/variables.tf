@@ -51,3 +51,13 @@ variable "tm_iam_prefix" {
 variable "secret_prefix" {
   type = string
 }
+
+variable dummy_saml_idp_basic_auth_user {
+  type = string
+  default = "someuser"
+}
+
+variable dummy_saml_idp_basic_auth_password {
+  type = string
+  default = "topsecret"
+}

@@ -60,9 +60,8 @@ resource "helm_release" "kafka_nginx_ingress_controller" {
   ]
 }
 
-
 resource "kubectl_manifest" "kafka_ingress" {
-  count = 1
+  count = 0 # Redundant. Ingress instances will be created by strimzi operator.
   depends_on = [
     helm_release.kafka_nginx_ingress_controller
   ]
@@ -74,7 +73,7 @@ metadata:
     external-dns.alpha.kubernetes.io/hostname: ${local.kafka_bootstrap_hostname}
     ingress.kubernetes.io/ssl-passthrough: "true"
     kubernetes.io/ingress.class: ${local.ingress_nginx_ingress_class}
-    nginx.ingress.kubernetes.io/backend-protocol: HTTPS
+    nginx.ingress.kubernetes.io/backend-protocol: ssl
     nginx.ingress.kubernetes.io/ssl-passthrough: "true"
     tmachine.io/dns.class: private
   labels:
@@ -83,19 +82,22 @@ metadata:
   name: ${local.kafka_bootstrap_hostname}
   namespace: ${local.kafka_namespace}
 spec:
+  ingressClassName: ${local.ingress_nginx_ingress_class}
+  tls:
+    - hosts:
+        - ${local.kafka_bootstrap_hostname}
+        - "*.kafka.svc.cluster.local"
+      secretName: ${local.kafka_broker_internal_cert}
   rules:
     - host: ${local.kafka_bootstrap_hostname}
       http:
         paths:
-          - backend:
+          - path: /
+            pathType: Prefix
+            backend:
               service:
                 name: ${local.kafka_name}-kafka-external-bootstrap
                 port:
                   number: ${local.kafka_external_port}
-            path: /
-            pathType: Prefix
-  tls:
-    - hosts:
-        - ${local.kafka_bootstrap_hostname}
 EOF
 }

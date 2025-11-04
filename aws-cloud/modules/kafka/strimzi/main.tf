@@ -29,6 +29,7 @@ locals {
   kafka_broker_hostnames      = formatlist("kafka-%s.${local.kafka_subdomain}", range(var.kafka_broker_replicas))
   kafka_bootstrap_hostname    = "bootstrap.${local.kafka_subdomain}"
   kafka_broker_internal_cert  = "kafka-broker-internal-cert"
+  kafka_broker_internal_ca    = "kafka-broker-internal-ca"
   kafka_external_port         = 9093
   sasl_scram_test_secret_name = "sasl-scram-test-secret"
   sasl_scram_test_secret_password_field = "password"
@@ -42,11 +43,14 @@ locals {
 
 # CRDs are upgraded outside of helm.
 resource "helm_release" "strimzi" {
+  depends_on = [
+    kubernetes_namespace.kafka
+  ]
   count = 1
   name       = "strimzi-cluster-operator"
   repository = "oci://quay.io/strimzi-helm/"
   chart      = "strimzi-kafka-operator"
-  namespace  = "strimzi"
+  namespace  = local.kafka_namespace
   create_namespace = true
   version    = "0.45.1" # Strimzi 0.45 is the last minor Strimzi version with support for ZooKeeper
   set = [
@@ -96,7 +100,7 @@ EOF
 resource "kubectl_manifest" "kafka_cluster" {
   count = 1
   depends_on = [
-    helm_release.strimzi, kubectl_manifest.kafka_cluster
+    helm_release.strimzi, kubectl_manifest.kafka_nodepool, kubectl_manifest.kafka_broker_internal_cert
   ]
   yaml_body = <<-EOF
 apiVersion: kafka.strimzi.io/v1beta2
@@ -146,31 +150,33 @@ spec:
         configuration:
           class: ${local.ingress_nginx_ingress_class}
           bootstrap:
+            host: ${local.kafka_bootstrap_hostname}
             alternativeNames:
             - kafka
             - ${local.kafka_name}-kafka-bootstrap.${local.kafka_namespace}.svc.cluster.local
-            - ${local.kafka_bootstrap_hostname}
             annotations:
               kubernetes.io/ingress.class: ${local.ingress_nginx_ingress_class}
               external-dns.alpha.kubernetes.io/hostname: ${local.kafka_bootstrap_hostname}
-            host: ${local.kafka_bootstrap_hostname}
-          brokerCertChainAndKey:
-            secretName: ${local.kafka_broker_internal_cert}
-            certificate: tls.crt
-            key: tls.key
           brokers:
           - broker: 0
             host: ${local.kafka_broker_hostnames[0]}
             annotations:
+              kubernetes.io/ingress.class: ${local.ingress_nginx_ingress_class}
               external-dns.alpha.kubernetes.io/hostname: ${local.kafka_broker_hostnames[0]}
           - broker: 1
             host: ${local.kafka_broker_hostnames[1]}
             annotations:
+              kubernetes.io/ingress.class: ${local.ingress_nginx_ingress_class}
               external-dns.alpha.kubernetes.io/hostname: ${local.kafka_broker_hostnames[1]}
           - broker: 2
             host:  ${local.kafka_broker_hostnames[2]}
             annotations:
+              kubernetes.io/ingress.class: ${local.ingress_nginx_ingress_class}
               external-dns.alpha.kubernetes.io/hostname: ${local.kafka_broker_hostnames[2]}
+          brokerCertChainAndKey:
+            secretName: ${local.kafka_broker_internal_cert}
+            certificate: tls.crt
+            key: tls.key
     config:
       message.max.bytes: 4194304
       replica.fetch.max.bytes: 5242880
@@ -193,6 +199,7 @@ spec:
     topicOperator: {}
     userOperator: {}
 EOF
+#           class: ${local.ingress_nginx_ingress_class}
 }
 
 # test sasl scram 
@@ -242,6 +249,7 @@ spec:
 # nosemgrep: resource-not-on-allowlist
 resource "kubectl_manifest" "kafka_broker_internal_cert" {
   count = 1
+  depends_on = [ kubernetes_namespace.kafka ]
   yaml_body = <<-EOF
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -251,15 +259,32 @@ metadata:
 spec:
   secretName: ${local.kafka_broker_internal_cert}
   issuerRef:
-    name: ${var.cert_manager_selfsigned_cluster_issuer}
-    kind: ClusterIssuer
-    group: cert-manager.io
+    name: ${local.kafka_broker_internal_ca}
+    kind: Issuer
+  duration: 2160h
+  renewBefore: 360h
   subject:
     organizationalUnits:
       - "kafka"
     organizations:
       - "Thought Machine Ltd"
   dnsNames:
+    - "${local.kafka_subdomain}"
     - "*.${local.kafka_subdomain}"
-  EOF
+    - "kafka.svc.cluster.local"
+    - "*.kafka.svc.cluster.local"
+EOF
+}
+
+resource "kubectl_manifest" "kafka_broker_internal_ca" {
+  depends_on = [ kubernetes_namespace.kafka ]
+  yaml_body = <<-EOF
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: ${local.kafka_broker_internal_ca}
+  namespace: ${kubernetes_namespace.kafka.id}
+spec:
+  selfSigned: {}
+EOF
 }

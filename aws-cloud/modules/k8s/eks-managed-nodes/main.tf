@@ -98,11 +98,11 @@ module "eks" {
     "karpenter.sh/discovery" = var.project
   }
 
-  eks_managed_node_groups = {
+  eks_managed_node_groups = { # TODO REFACTOR into separate resource.
     "${var.project}-on" = {
       min_size       = 1
       max_size       = 10
-      desired_size   = 3
+      desired_size   = 5
       instance_types = ["m6a.2xlarge", "m5a.2xlarge", "m5.2xlarge", "c6a.2xlarge", "c5a.2xlarge", "c5.2xlarge"]
       capacity_type  = "ON_DEMAND"
       labels = {
@@ -110,5 +110,12 @@ module "eks" {
         "karpenter.sh/controller" = "true"
       }
     }
+    lifecycle = {
+      ignore_changes = [
+        # version,
+        # scaling_config[0].desired_size
+      ]
+    }
   }
+
 }

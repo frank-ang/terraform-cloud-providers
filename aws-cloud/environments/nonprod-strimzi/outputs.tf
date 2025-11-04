@@ -46,11 +46,11 @@ output "vault_installer_role_arn" {
 }
 
 output "msk_sasl_scram_cmk_arn" {
-  value = "NULL" # module.kafka.msk_sasl_scram_cmk_arn
+  value = "" # module.kafka.msk_sasl_scram_cmk_arn
 }
 
 output "msk_cluster_arn" {
-  value = "NULL" # module.kafka.msk_cluster_arn
+  value = "" # module.kafka.msk_cluster_arn
 }
 
 output "bootstrap_brokers_sasl_scram" {
@@ -67,4 +67,12 @@ output "ingress_class_name" {
 
 output "cert_manager_selfsigned_cluster_issuer" {
   value = module.eks.cert_manager_selfsigned_cluster_issuer
+}
+
+output "dummy_saml_idp_basic_auth_user" {
+  value = module.secrets-manager.dummy_saml_idp_basic_auth_password
+}
+
+output "dummy_saml_idp_basic_auth_password" {
+  value = module.secrets-manager.dummy_saml_idp_basic_auth_password
 }

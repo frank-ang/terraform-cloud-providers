@@ -11,5 +11,7 @@ output "strimzi_kafka_tls_cert_path" {
 }
 
 output "bootstrap_brokers_sasl_scram" {
-  value = "${local.kafka_name}-kafka-bootstrap.${local.kafka_namespace}.svc.cluster.local:9097"
+  value = "${local.kafka_broker_hostnames[0]}:443,${local.kafka_broker_hostnames[1]}:443,${local.kafka_broker_hostnames[2]}:443"
+  # value = "${local.kafka_bootstrap_hostname}:443"
+  #value = "${local.kafka_name}-kafka-bootstrap.${local.kafka_namespace}.svc.cluster.local:9097"
 }
