@@ -23,13 +23,14 @@ provider "helm" {
 }
 
 locals {
+  eks_name                    = "${var.project}-eks"
   kafka_namespace             = "kafka"
   kafka_name                  = "kafka-${var.project}"
   kafka_subdomain             = "${local.kafka_namespace}.${var.project_domain}"
   kafka_broker_hostnames      = formatlist("kafka-%s.${local.kafka_subdomain}", range(var.kafka_broker_replicas))
   kafka_bootstrap_hostname    = "bootstrap.${local.kafka_subdomain}"
   kafka_broker_internal_cert  = "kafka-broker-internal-cert"
-  kafka_broker_internal_ca    = "kafka-broker-internal-ca"
+  # kafka_broker_internal_ca    = "kafka-broker-internal-ca"
   kafka_external_port         = 9093
   sasl_scram_test_secret_name = "sasl-scram-test-secret"
   sasl_scram_test_secret_password_field = "password"
@@ -39,6 +40,12 @@ locals {
   }
   base64_sasl_scram_test_secret_password = base64encode(local.sasl_scram_test_secret.password)
   strimzi_kafka_ssl_dir_path = "/strimzi-kafka-certs"
+}
+
+resource "null_resource" "kubectl" {
+    provisioner "local-exec" {
+        command = "aws eks --region ${var.aws_region} update-kubeconfig --name ${local.eks_name}"
+    }
 }
 
 # CRDs are upgraded outside of helm.
@@ -69,12 +76,15 @@ resource "kubernetes_namespace" "kafka" {
   metadata {
     name = local.kafka_namespace
   }
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "kubectl_manifest" "kafka_nodepool" {
   count = 1
   depends_on = [
-    helm_release.strimzi,
+    helm_release.strimzi
   ]
   yaml_body = <<-EOF
 apiVersion: kafka.strimzi.io/v1beta2
@@ -100,7 +110,7 @@ EOF
 resource "kubectl_manifest" "kafka_cluster" {
   count = 1
   depends_on = [
-    helm_release.strimzi, kubectl_manifest.kafka_nodepool, kubectl_manifest.kafka_broker_internal_cert
+    kubectl_manifest.kafka_nodepool, kubectl_manifest.kafka_broker_internal_cert
   ]
   yaml_body = <<-EOF
 apiVersion: kafka.strimzi.io/v1beta2
@@ -147,6 +157,8 @@ spec:
         tls: true
         authentication:
           type: scram-sha-512
+        authorization:
+          type: simple
         configuration:
           class: ${local.ingress_nginx_ingress_class}
           bootstrap:
@@ -188,6 +200,8 @@ spec:
       offsets.retention.minutes: 20160
       auto.create.topics.enable: true
       temp.auto.create.topics.enable: false
+    authorization:
+      type: simple
   zookeeper:
     replicas: 3
     storage:
@@ -203,7 +217,6 @@ EOF
 }
 
 # test sasl scram 
-# nosemgrep: resource-not-on-allowlist
 resource "kubectl_manifest" "kafka_test_sasl_secret" {
   count = 1
   depends_on      = [ kubectl_manifest.kafka_cluster ]
@@ -223,9 +236,8 @@ resource "time_sleep" "kafka_test_sasl_secret_wait" {
   create_duration = "3s"
 }
 
-# nosemgrep: resource-not-on-allowlist
 resource "kubectl_manifest" "kafka_test_sasl_secret_kafkauser" {
-  count = 1
+  count = 0
   depends_on = [time_sleep.kafka_test_sasl_secret_wait]
   yaml_body  = <<-EOF
 apiVersion: kafka.strimzi.io/v1beta2
@@ -246,10 +258,54 @@ spec:
   EOF
 }
 
-# nosemgrep: resource-not-on-allowlist
+resource "kubectl_manifest" "kafka_root_ca_issuer" {
+  depends_on = [ kubernetes_namespace.kafka ]
+  yaml_body = <<-EOF
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: kafka-root-ca-issuer
+  namespace: ${kubernetes_namespace.kafka.id}
+spec:
+  selfSigned: {}
+EOF
+}
+
+resource "kubectl_manifest" "kafka_root_ca_certificate" {
+  depends_on = [ kubectl_manifest.kafka_root_ca_issuer ]
+  yaml_body = <<-EOF
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: kafka-root-ca-certificate
+  namespace: ${kubernetes_namespace.kafka.id}
+spec:
+  isCA: true
+  commonName: Kafka Self-Signed Root CA
+  secretName: kafka-root-ca-tls # <-- will contain ca.crt + tls.crt + tls.key
+  issuerRef:
+    name: kafka-root-ca-issuer
+    kind: Issuer
+EOF
+}
+
+resource "kubectl_manifest" "kafka_ca_issuer" {
+  depends_on = [ kubectl_manifest.kafka_root_ca_certificate ]
+  yaml_body = <<-EOF
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: kafka-ca-issuer
+  namespace: ${kubernetes_namespace.kafka.id}
+spec:
+  ca:
+    secretName: kafka-root-ca-tls
+EOF
+}
+
 resource "kubectl_manifest" "kafka_broker_internal_cert" {
   count = 1
-  depends_on = [ kubernetes_namespace.kafka ]
+  depends_on = [ kubectl_manifest.kafka_ca_issuer ]
   yaml_body = <<-EOF
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -259,7 +315,7 @@ metadata:
 spec:
   secretName: ${local.kafka_broker_internal_cert}
   issuerRef:
-    name: ${local.kafka_broker_internal_ca}
+    name: kafka-ca-issuer
     kind: Issuer
   duration: 2160h
   renewBefore: 360h
@@ -273,18 +329,5 @@ spec:
     - "*.${local.kafka_subdomain}"
     - "kafka.svc.cluster.local"
     - "*.kafka.svc.cluster.local"
-EOF
-}
-
-resource "kubectl_manifest" "kafka_broker_internal_ca" {
-  depends_on = [ kubernetes_namespace.kafka ]
-  yaml_body = <<-EOF
-apiVersion: cert-manager.io/v1
-kind: Issuer
-metadata:
-  name: ${local.kafka_broker_internal_ca}
-  namespace: ${kubernetes_namespace.kafka.id}
-spec:
-  selfSigned: {}
 EOF
 }

@@ -32,8 +32,7 @@ locals {
     aws_account_id = data.aws_caller_identity.main.account_id
 }
 
-# nosemgrep: resource-not-on-allowlist
-resource "helm_release" "secrets-provider-aws" {
+resource "helm_release" "secrets_provider_aws" {
   name       = "secrets-provider-aws"
   repository = "https://aws.github.io/secrets-store-csi-driver-provider-aws"
   chart      = "secrets-store-csi-driver-provider-aws"
@@ -41,7 +40,6 @@ resource "helm_release" "secrets-provider-aws" {
   version    = "2.0.0"
 }
 
-# database root password
 resource "aws_secretsmanager_secret" "root_db_secret" {
   name                    = "${var.tm_iam_prefix}/${var.secret_prefix}/${local.db_secrets_name}"
   description             = "TM database root credentials for ${var.database_hostname}"

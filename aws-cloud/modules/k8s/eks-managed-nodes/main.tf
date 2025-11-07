@@ -11,9 +11,16 @@ locals {
   eks_name           = "${var.project}-eks"
   kubernetes_version = "1.33"
   aws_account_id = data.aws_caller_identity.current.account_id
+  eks_ami_release_version = data.aws_ssm_parameter.eks_ami_release_version.value
+}
+
+data "aws_ssm_parameter" "eks_ami_release_version" {
+  name = "/aws/service/eks/optimized-ami/${local.kubernetes_version}/amazon-linux-2023/x86_64/standard/recommended/image_id"
+  # aws ssm get-parameter --name /aws/service/eks/optimized-ami/1.33/amazon-linux-2023/x86_64/standard/recommended/image_id --query "Parameter.Value" --output text
 }
 
 data "aws_caller_identity" "current" {}
+
 data "aws_iam_session_context" "current" {
   arn = data.aws_caller_identity.current.arn
 }
@@ -85,10 +92,10 @@ module "eks" {
       self        = true
     }
     ingress_self_all = {
-      description = "Control plane to Istio sidecar injection webhook"
-      protocol    = "-1"
-      from_port   = 15017
-      to_port     = 15017
+      description = "Control plane to nodes"
+      protocol    = "-1" # All
+      from_port   = 0
+      to_port     = 0
       type        = "ingress"
       source_cluster_security_group = true
     }
@@ -98,24 +105,19 @@ module "eks" {
     "karpenter.sh/discovery" = var.project
   }
 
-  eks_managed_node_groups = { # TODO REFACTOR into separate resource.
+  eks_managed_node_groups = {
     "${var.project}-on" = {
+      desired_size   = 5
       min_size       = 1
       max_size       = 10
-      desired_size   = 5
       instance_types = ["m6a.2xlarge", "m5a.2xlarge", "m5.2xlarge", "c6a.2xlarge", "c5a.2xlarge", "c5.2xlarge"]
       capacity_type  = "ON_DEMAND"
       labels = {
         # Karpenter to run on nodes not managed by itself.
         "karpenter.sh/controller" = "true"
       }
-    }
-    lifecycle = {
-      ignore_changes = [
-        # version,
-        # scaling_config[0].desired_size
-      ]
+      use_latest_ami_release_version = false
+      eks_ami_release_version = local.eks_ami_release_version
     }
   }
-
 }
