@@ -32,12 +32,13 @@ locals {
     aws_account_id = data.aws_caller_identity.main.account_id
 }
 
-resource "helm_release" "secrets_provider_aws" {
+resource "helm_release" "secrets-provider-aws" {
   name       = "secrets-provider-aws"
   repository = "https://aws.github.io/secrets-store-csi-driver-provider-aws"
   chart      = "secrets-store-csi-driver-provider-aws"
   namespace  = "kube-system"
   version    = "2.0.0"
+  # replace    = true # attempt fix apply error: "cannot re-use a name that is still in use"
 }
 
 resource "aws_secretsmanager_secret" "root_db_secret" {

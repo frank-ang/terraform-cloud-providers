@@ -89,3 +89,21 @@ module "kafka" {
   ingress_class_name    = module.eks.ingress_class_name
   cert_manager_selfsigned_cluster_issuer = module.eks.cert_manager_selfsigned_cluster_issuer
 }
+
+module "secrets-manager-hault" {
+  source                         = "../../modules/secrets/hashicorp-vault"
+  project                        = var.project
+  owner                          = var.owner
+  aws_region                     = var.aws_region
+  aws_profile                    = var.aws_profile
+  project_domain                 = var.project_domain
+  eks_cluster_name               = module.eks.cluster_name
+  #database_hostname              = module.db.cluster_endpoint
+  #database_password              = random_password.db_password.result
+  tm_iam_prefix                  = var.tm_iam_prefix
+  secret_prefix                  = var.secret_prefix
+  ingress_class_name             = module.eks.ingress_class_name
+  cluster_issuer                 = module.eks.cert_manager_selfsigned_cluster_issuer
+  vault_installer_namespace      = var.vault_installer_namespace
+  vault_installer_serviceaccount = var.vault_installer_serviceaccount
+}

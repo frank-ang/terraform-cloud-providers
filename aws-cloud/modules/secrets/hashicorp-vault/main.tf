@@ -1,5 +1,14 @@
 
 # https://bank-vaults.dev/docs/installing/
+terraform {
+  required_providers {
+    kubectl = {
+      source = "gavinbunney/kubectl"
+      version = "1.19.0"
+    }
+  }
+}
+
 locals {
   hault_name                   = "hault"
   hault_namespace              = "hault-system"
@@ -13,118 +22,29 @@ locals {
   hault_kms_key_alias          = "${var.project}-${local.hault_name}"
   bank_vaults_operator_version = "1.22.0" #https://github.com/bank-vaults/vault-operator
   bank_vaults_image_version    = "1.31.0" #https://github.com/bank-vaults/bank-vaults
+  vault_installer_role_name    = "vault-installer"
 }
 
-data "aws_iam_policy_document" "hault_irsa_policy" {
-  statement {
-    sid = "KMS"
-    actions = [
-      "kms:Decrypt",
-      "kms:Encrypt"
-    ]
-    resources = ["*"]
-  }
-  statement {
-    sid = "S3"
-    actions = [
-      "s3:PutObject",
-      "s3:GetObject"
-    ]
-    resources = ["*"]
-  }
-
-  statement {
-    sid = "S3ListBucket"
-    actions = [
-      "s3:ListBucket",
-    ]
-    resources = ["*"]
-  }
-
-  statement {
-    sid = "DynamoDB"
-    actions = [
-      "dynamodb:*",
-    ]
-    resources = [aws_dynamodb_table.hault.arn]
-  }
+provider "kubernetes" {
+    config_path = "~/.kube/config"
 }
 
-resource "aws_iam_policy" "hault_irsa_policy" {
-  name        = "${var.project}-${local.hault_name}"
-  description = "Access S3 and KMS for hault"
-  policy      = data.aws_iam_policy_document.hault_irsa_policy.json
+provider "kubectl" {
+  config_path = "~/.kube/config"
 }
 
-
-module "hault_irsa_role" {
-  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version = "5.37.0"
-
-  role_name = "${var.project}-${local.hault_name}"
-
-
-  role_policy_arns = {
-    _ = aws_iam_policy.hault_irsa_policy.arn
-  }
-
-  oidc_providers = {
-    main = {
-      provider_arn               = local.eks_oidc_provider_arn
-      namespace_service_accounts = ["${kubernetes_namespace.hault.id}:${local.hault_name}"]
+provider "helm" {
+    kubernetes = {
+      config_path = "~/.kube/config"
     }
-  }
-}
-
-resource "aws_kms_key" "hault" {
-  description         = "CMK used for encryption/decryption of hault unseal keys and root token"
-  enable_key_rotation = true
-}
-
-resource "aws_kms_alias" "hault" {
-  name          = "alias/${local.hault_kms_key_alias}"
-  target_key_id = aws_kms_key.hault.key_id
-}
-
-module "hault_s3" {
-  source  = "terraform-aws-modules/s3-bucket/aws"
-  version = "4.1.0"
-
-
-  bucket = local.hault_s3_bucket_name
-  acl    = "private"
-
-  control_object_ownership = true
-  object_ownership         = "ObjectWriter"
-  force_destroy            = true
-
-  versioning = {
-    enabled = false
-  }
-}
-
-resource "aws_dynamodb_table" "hault" {
-  name           = local.hault_dynamodb_table_name
-  billing_mode   = "PROVISIONED"
-  read_capacity  = 20
-  write_capacity = 20
-  hash_key       = "Path"
-  range_key      = "Key"
-
-  attribute {
-    name = "Path"
-    type = "S"
-  }
-
-  attribute {
-    name = "Key"
-    type = "S"
-  }
 }
 
 resource "kubernetes_namespace" "hault" {
   metadata {
     name = local.hault_namespace
+  }
+  lifecycle {
+    prevent_destroy = true
   }
 }
 
@@ -136,7 +56,7 @@ resource "helm_release" "hault_operator" {
   version    = local.bank_vaults_operator_version
 }
 
-resource "kubectl_manifest" "hault_sa" {
+resource "kubectl_manifest" "hault_service_account" {
   yaml_body = <<-EOF
 apiVersion: v1
 kind: ServiceAccount
@@ -148,8 +68,8 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: serviceaccount
     app.kubernetes.io/part-of: vault-operator
-  annotations:
-    eks.amazonaws.com/role-arn: ${module.hault_irsa_role.iam_role_arn}
+#  annotations:
+#    eks.amazonaws.com/role-arn: \$\{module.hault_irsa_role.iam_role_arn}
   name: ${local.hault_name}
   namespace: ${kubernetes_namespace.hault.id}
  EOF
@@ -226,7 +146,19 @@ rules:
   verbs:
   - create
   - patch
- EOF
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+EOF
 }
 
 resource "kubectl_manifest" "hault_rolebinding_leader_election" {
@@ -251,7 +183,7 @@ subjects:
 - kind: ServiceAccount
   name: ${local.hault_name}
  EOF
-  depends_on = [kubectl_manifest.hault_sa]
+  depends_on = [kubectl_manifest.hault_service_account]
 }
 
 resource "kubectl_manifest" "hault_rolebinding" {
@@ -276,7 +208,7 @@ subjects:
 - kind: ServiceAccount
   name: ${local.hault_name}
  EOF
-  depends_on = [kubectl_manifest.hault_sa]
+  depends_on = [kubectl_manifest.hault_service_account]
 }
 
 resource "kubectl_manifest" "hault_clusterrolebinding" {
@@ -312,21 +244,89 @@ metadata:
   namespace: ${kubernetes_namespace.hault.id}
 spec:
   size: 3
-  image: hashicorp/vault:${var.hault_version}
-  bankVaultsImage: ghcr.io/bank-vaults/bank-vaults:v${local.bank_vaults_image_version}
-  statsdImage: prom/statsd-exporter:v0.9.0
+  image: hashicorp/vault:1.14.1
 
+  # Common annotations for all created resources
+  annotations:
+    common/annotation: "true"
 
-  # Describe where you would like to store the Vault unseal keys and root token
-  # in S3 encrypted with KMS.
+  # Vault Pods , Services and TLS Secret annotations
+  vaultAnnotations:
+    type/instance: "vault"
+
+  # Vault Configurer Pods and Services annotations
+  vaultConfigurerAnnotations:
+    type/instance: "vaultconfigurer"
+
+  # Vault Pods , Services and TLS Secret labels
+  vaultLabels:
+    example.com/log-format: "json"
+
+  # Vault Configurer Pods and Services labels
+  vaultConfigurerLabels:
+    example.com/log-format: "string"
+
+  # Specify the Service's type where the Vault Service is exposed
+  # Please note that some Ingress controllers like https://github.com/kubernetes/ingress-gce
+  # forces you to expose your Service on a NodePort
+  serviceType: ClusterIP
+
+  # Request an Ingress controller with the default configuration
+  #ingress:
+    # Specify Ingress object annotations here, if TLS is enabled (which is by default)
+    # the operator will add NGINX, Traefik and HAProxy Ingress compatible annotations
+    # to support TLS backends
+    #annotations: {}
+    # Override the default Ingress specification here
+    # This follows the same format as the standard Kubernetes Ingress
+    # See: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.13/#ingressspec-v1beta1-extensions
+    #spec: {}
+
+  # Use local disk to store Vault raft data, see config section.
+  volumeClaimTemplates:
+    - metadata:
+        name: vault-raft
+      spec:
+        # https://kubernetes.io/docs/concepts/storage/persistent-volumes/#class-1
+        # storageClassName: ""
+        accessModes:
+          - ReadWriteOnce
+        volumeMode: Filesystem
+        resources:
+          requests:
+            storage: 1Gi
+
+  volumeMounts:
+    - name: vault-raft
+      mountPath: /vault/file
+
+  # Add Velero fsfreeze sidecar container and supporting hook annotations to Vault Pods:
+  # https://velero.io/docs/v1.2.0/hooks/
+  veleroEnabled: true
+
+  # Support for distributing the generated CA certificate Secret to other namespaces.
+  # Define a list of namespaces or use ["*"] for all namespaces.
+  caNamespaces:
+    - "vswh"
+
+  # Describe where you would like to store the Vault unseal keys and root token.
   unsealConfig:
-    aws:
-      kmsKeyId: ${aws_kms_key.hault.key_id}
-      kmsRegion: ${var.aws_region}
-      s3Bucket: ${module.hault_s3.s3_bucket_id}
-      s3Prefix: "${local.hault_operator_chart_name}/"
-      s3Region: ${var.aws_region}
-
+    options:
+      # The preFlightChecks flag enables unseal and root token storage tests
+      # This is true by default
+      preFlightChecks: true
+      # The storeRootToken flag enables storing of root token in chosen storage
+      # This is true by default
+      storeRootToken: true
+      # The secretShares represents the total number of unseal key shares
+      # This is 5 by default
+      secretShares: 5
+      # The secretThreshold represents the minimum number of shares required to reconstruct the unseal key
+      # This is 3 by default
+      secretThreshold: 3
+    kubernetes:
+      secretNamespace: default
+      
   # Specify the ServiceAccount where the Vault Pod and the Bank-Vaults configurer/unsealer is running
   serviceAccount: ${local.hault_name}
 
@@ -334,28 +334,35 @@ spec:
   # cannot use the ingress cert so we need to use self signed
   # existingTlsSecretName: ${local.hault_name}-tls
 
-  # A YAML representation of a final vault config file, this config represents
-  # a backend config in AWS.
+  # A YAML representation of a final vault config file.
   # See https://www.vaultproject.io/docs/configuration/ for more information.
   config:
     storage:
-      # s3: #only work if size=1
-      #   region: ${var.aws_region}
-      #   bucket: ${module.hault_s3.s3_bucket_id}
-      dynamodb:
-        ha_enabled: true
-        region: ${var.aws_region}
-        table: ${aws_dynamodb_table.hault.id}
+      raft:
+        path: "/vault/file"
     listener:
       tcp:
         address: "0.0.0.0:8200"
         tls_cert_file: /vault/tls/server.crt
         tls_key_file: /vault/tls/server.key
-    api_addr: ${local.hault_api_addr}
-    cluster_addr: https://$${.Env.POD_NAME}:8201
-    telemetry:
-      statsd_address: localhost:9125
+    api_addr: https://vault.default:8200
+    cluster_addr: "https:/$${.Env.POD_NAME}:8201"
     ui: true
+
+  statsdDisabled: true
+
+  serviceRegistrationEnabled: true
+
+  resources:
+    # A YAML representation of resource ResourceRequirements for vault container
+    # Detail can reference: https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container
+    vault:
+      limits:
+        memory: "512Mi"
+        cpu: "200m"
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
 
   vaultEnvsConfig:
   - name: VAULT_LOG_LEVEL
@@ -374,12 +381,12 @@ spec:
       - name: vault-installer-hashicorp-vault-policy
         rules: |
           # Required for vault installer to manage internal secrets and certs used by Thought Machine Vault
-          path "${var.hault_kv_secret_engine.name}/${var.secret_prefix}/*" {
+          path "secret/${var.secret_prefix}/*" {
             capabilities = ["create", "read", "update", "delete", "list"]
           }
 
           # Required by Observability packages installer
-          path "${var.hault_kv_secret_engine.name}/monitoring/*" {
+          path "secret/monitoring/*" {
             capabilities = ["create", "read", "update", "delete", "list"]
           }
 
@@ -394,63 +401,31 @@ spec:
           }
 
           # Optional: allows vault installer to automatically create policies for services in HashiCorp Vault
-          path "auth/${var.hault_kv_secret_engine.name}/role/*"{
+          path "auth/secret/role/*"{
             capabilities = ["create", "read", "update", "delete"]
           }
 
     auth:
       - type: kubernetes
-        path: ${var.hault_kubernetes_auth_backend.name}
-        description: kubernetes auth backend for ${local.eks_cluster_name} EKS cluster
+        path: secret
+        description: kubernetes auth backend for EKS cluster
         roles:
-          - name: ${var.hault_kubernetes_auth_backend.vault_installer_role_name}
+          - name: ${local.vault_installer_role_name}
             bound_service_account_namespaces: ${var.vault_installer_namespace}
             bound_service_account_names: ${var.vault_installer_serviceaccount}
             policies: vault-installer-hashicorp-vault-policy
             ttl: 1h
 
     secrets:
-      - type: kv
-        path: ${var.hault_kv_secret_engine.name}
-        description: Hault KV secret engine  
+      - path: secret
+        type: kv
+        description: General secrets.
         options:
-          version: ${var.hault_kv_secret_engine.version}
+          version: 2
 
-      - type: pki
-        path: ${var.hault_pki_secret_engine.name}
-        description: Hault PKI secret engine to sign Kafka mTLS certificates
-        config:
-          default_lease_ttl: 8760h
-          max_lease_ttl: 87600h
-        configuration:
-          config:
-          - name: urls
-            issuing_certificates: https://${local.hault_hostname}:443/v1/pki/ca
-            crl_distribution_points: https://${local.hault_hostname}:443/v1/pki/crl
-          root/generate:
-          - name: internal
-            common_name: ${local.hault_name}.${kubernetes_namespace.hault.id}
-            ttl: 87600h
-          roles:
-          - name: ${var.hault_pki_secret_engine.vault_installer_role_name}
-            allow_any_name: true
-            enforce_hostnames: true
-            ttl: 8760h
-
-    # Allows writing some secrets to Vault (useful for development purposes).
-    # See https://www.vaultproject.io/docs/secrets/kv/index.html for more information.
-    startupSecrets:
-      - type: kv
-        path: ${var.hault_kv_secret_engine.name}/data/${var.secret_prefix}/${local.root_db_secrets_name}
-        data:
-          data:
-            ${local.database_hostname}: ${local.database_credentials_admin_user_password}
-      - type: kv
-        path: ${var.hault_kv_secret_engine.name}/data/${var.secret_prefix}/${local.dummy_saml_idp_secrets_name}
-        data:
-          data:
-            ${keys(var.basic_auth_credentials)[0]}: ${var.basic_auth_credentials[keys(var.basic_auth_credentials)[0]]}
-            ${keys(var.basic_auth_credentials)[1]}: ${var.basic_auth_credentials[keys(var.basic_auth_credentials)[1]]}
+      #- type: pki
+      #  path: TODO
+      #  description: Hault PKI secret engine to sign Kafka mTLS certificates
 
 EOF
   depends_on = [
@@ -466,13 +441,13 @@ kind: Ingress
 metadata:
   name: ${local.hault_name}
   annotations:
-    cert-manager.io/cluster-issuer: ${local.cert_manager_selfsigned_cluster_issuer}
+    cert-manager.io/cluster-issuer: ${var.cluster_issuer}
     external-dns.alpha.kubernetes.io/ingress-hostname-source: defined-hosts-only
     # required as hault uses TLS with a self signed cert
     nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
   namespace: ${kubernetes_namespace.hault.id}
 spec:
-  ingressClassName: ${local.ingress_class_name}
+  ingressClassName: ${var.ingress_class_name}
   tls:
   - hosts:
     - ${local.hault_hostname}

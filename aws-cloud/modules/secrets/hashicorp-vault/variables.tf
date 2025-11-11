@@ -29,3 +29,19 @@ variable "tm_iam_prefix" {
 variable "secret_prefix" {
   type = string
 }
+
+variable "ingress_class_name" {
+  type = string
+}
+
+variable "cluster_issuer" {
+  type = string
+}
+
+variable "vault_installer_namespace" {
+  type = string
+}
+
+variable "vault_installer_serviceaccount" {
+  type = string
+}
