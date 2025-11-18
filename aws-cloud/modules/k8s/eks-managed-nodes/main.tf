@@ -16,7 +16,6 @@ locals {
 
 data "aws_ssm_parameter" "eks_ami_release_version" {
   name = "/aws/service/eks/optimized-ami/${local.kubernetes_version}/amazon-linux-2023/x86_64/standard/recommended/image_id"
-  # aws ssm get-parameter --name /aws/service/eks/optimized-ami/1.33/amazon-linux-2023/x86_64/standard/recommended/image_id --query "Parameter.Value" --output text
 }
 
 data "aws_caller_identity" "current" {}
@@ -28,20 +27,6 @@ data "aws_iam_session_context" "current" {
 data "aws_eks_cluster" "eks" {
   name = module.eks.cluster_name
   depends_on = [ module.eks ]
-}
-
-provider "kubernetes" {
-    config_path = "~/.kube/config"
-}
-
-provider "kubectl" {
-  config_path = "~/.kube/config"
-}
-
-provider "helm" {
-    kubernetes = {
-      config_path = "~/.kube/config"
-    }
 }
 
 resource "null_resource" "kubectl" {

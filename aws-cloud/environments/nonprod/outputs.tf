@@ -68,3 +68,11 @@ output "ingress_class_name" {
 output "cert_manager_selfsigned_cluster_issuer" {
   value = module.eks.cert_manager_selfsigned_cluster_issuer
 }
+
+output "dummy_saml_idp_basic_auth_user" {
+  value = module.secrets-manager.dummy_saml_idp_basic_auth_password
+}
+
+output "dummy_saml_idp_basic_auth_password" {
+  value = module.secrets-manager.dummy_saml_idp_basic_auth_password
+}

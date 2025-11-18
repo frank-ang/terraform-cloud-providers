@@ -4,6 +4,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 6.0"
     }
+    kubectl = {
+      source = "gavinbunney/kubectl"
+      version = "1.19.0"
+    }
   }
   backend "s3" {
   }
@@ -19,6 +23,20 @@ provider "aws" {
       Created_by = "Terraform"
     }
   }
+}
+
+provider "kubernetes" {
+    config_path = "~/.kube/config"
+}
+
+provider "kubectl" {
+  config_path = "~/.kube/config"
+}
+
+provider "helm" {
+    kubernetes = {
+      config_path = "~/.kube/config"
+    }
 }
 
 module "network" {
@@ -39,6 +57,7 @@ module "eks" {
   vpc_id             = module.network.vpc_id
   private_subnet_ids = module.network.private_subnets
   route53_private_zone_arn = module.network.aws_route53_private_zone_arn
+  depends_on         = [ module.network ]
 }
 
 module "db" {
@@ -53,6 +72,7 @@ module "db" {
   database_version   = "16.9"
   master_username    = "postgres"
   master_password    = random_password.db_password.result
+  depends_on         = [ module.eks ]
 }
 
 module "secrets-manager" {
@@ -69,6 +89,7 @@ module "secrets-manager" {
   secret_prefix                  = var.secret_prefix
   vault_installer_namespace      = var.vault_installer_namespace
   vault_installer_serviceaccount = var.vault_installer_serviceaccount
+  depends_on                     = [ module.eks ]
 }
 
 resource "random_password" "db_password" {
@@ -87,4 +108,5 @@ module "kafka" {
   aws_profile           = var.aws_profile
   private_subnet_ids    = module.network.private_subnets
   app_security_group_id = module.eks.node_security_group_id
+  depends_on            = [ module.eks ]
 }
