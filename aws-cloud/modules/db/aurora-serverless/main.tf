@@ -3,7 +3,8 @@ locals {
 }
 
 module "aurora_postgresql_v2" {
-  source = "terraform-aws-modules/rds-aurora/aws"
+  source  = "terraform-aws-modules/rds-aurora/aws"
+  version = "~> 9.16.1"
   name                         = local.rds_name
   engine                       = "aurora-postgresql"
   engine_mode                  = "provisioned"

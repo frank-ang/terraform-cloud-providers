@@ -55,22 +55,6 @@ module "db" {
   master_password    = random_password.db_password.result
 }
 
-module "secrets-manager" {
-  source                         = "../../modules/secrets/aws-secrets-manager"
-  project                        = var.project
-  owner                          = var.owner
-  aws_region                     = var.aws_region
-  aws_profile                    = var.aws_profile
-  eks_cluster_name               = module.eks.cluster_name
-  eks_oidc_provider_arn          = module.eks.oidc_provider_arn
-  database_hostname              = module.db.cluster_endpoint
-  database_password              = random_password.db_password.result
-  tm_iam_prefix                  = var.tm_iam_prefix
-  secret_prefix                  = var.secret_prefix
-  vault_installer_namespace      = var.vault_installer_namespace
-  vault_installer_serviceaccount = var.vault_installer_serviceaccount
-}
-
 resource "random_password" "db_password" {
     length           = 8
     min_upper        = 1
@@ -98,12 +82,10 @@ module "secrets-manager-hault" {
   aws_profile                    = var.aws_profile
   project_domain                 = var.project_domain
   eks_cluster_name               = module.eks.cluster_name
-  #database_hostname              = module.db.cluster_endpoint
-  #database_password              = random_password.db_password.result
-  tm_iam_prefix                  = var.tm_iam_prefix
+  database_hostname              = module.db.cluster_endpoint
+  database_password              = random_password.db_password.result
   secret_prefix                  = var.secret_prefix
   ingress_class_name             = module.eks.ingress_class_name
-  cluster_issuer                 = module.eks.cert_manager_selfsigned_cluster_issuer
   vault_installer_namespace      = var.vault_installer_namespace
   vault_installer_serviceaccount = var.vault_installer_serviceaccount
 }

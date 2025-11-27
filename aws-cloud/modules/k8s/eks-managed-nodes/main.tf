@@ -7,6 +7,20 @@ terraform {
   }
 }
 
+provider "kubernetes" {
+    config_path = "~/.kube/config"
+}
+
+provider "kubectl" {
+    config_path = "~/.kube/config"
+}
+
+provider "helm" {
+    kubernetes = {
+      config_path = "~/.kube/config"
+    }
+}
+
 locals {
   eks_name           = "${var.project}-eks"
   kubernetes_version = "1.33"
@@ -16,6 +30,7 @@ locals {
 
 data "aws_ssm_parameter" "eks_ami_release_version" {
   name = "/aws/service/eks/optimized-ami/${local.kubernetes_version}/amazon-linux-2023/x86_64/standard/recommended/image_id"
+  # aws ssm get-parameter --name /aws/service/eks/optimized-ami/1.33/amazon-linux-2023/x86_64/standard/recommended/image_id --query "Parameter.Value" --output text
 }
 
 data "aws_caller_identity" "current" {}
@@ -92,7 +107,7 @@ module "eks" {
 
   eks_managed_node_groups = {
     "${var.project}-on" = {
-      desired_size   = 5
+      desired_size   = 3
       min_size       = 1
       max_size       = 10
       instance_types = ["m6a.2xlarge", "m5a.2xlarge", "m5.2xlarge", "c6a.2xlarge", "c5a.2xlarge", "c5.2xlarge"]
@@ -104,5 +119,23 @@ module "eks" {
       use_latest_ami_release_version = false
       eks_ami_release_version = local.eks_ami_release_version
     }
+  }
+}
+
+resource "kubernetes_storage_class" "gp3" {
+  metadata {
+    name = "gp3"
+    annotations = {
+      "storageclass.kubernetes.io/is-default-class" = "true"
+    }
+  }
+  storage_provisioner    = "ebs.csi.aws.com"
+  volume_binding_mode    = "WaitForFirstConsumer"
+  allow_volume_expansion = true
+  reclaim_policy         = "Delete"
+  parameters = {
+    "encrypted" = "true"
+    "fsType"    = "ext4"
+    "type"      = "gp3"
   }
 }

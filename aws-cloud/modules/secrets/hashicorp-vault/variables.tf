@@ -22,26 +22,39 @@ variable "eks_cluster_name" {
   type = string
 }
 
-variable "tm_iam_prefix" {
-  type = string
-}
-
 variable "secret_prefix" {
   type = string
 }
 
 variable "ingress_class_name" {
   type = string
+  default = "ingress-nginx-private"
 }
 
-variable "cluster_issuer" {
+variable "database_hostname" {
+  type = string
+}
+
+variable "database_password" {
   type = string
 }
 
 variable "vault_installer_namespace" {
   type = string
+  default = "tm-system"
 }
 
 variable "vault_installer_serviceaccount" {
   type = string
+  default = "vault-installer"
+}
+
+variable dummy_saml_idp_basic_auth_user {
+  type = string
+  default = "someuser"
+}
+
+variable dummy_saml_idp_basic_auth_password {
+  type = string
+  default = "topsecret"
 }
