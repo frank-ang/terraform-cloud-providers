@@ -113,7 +113,7 @@ resource "random_password" "db_password" {
   override_special = "!#$%&*()-_=+[]{}<>:?"
 }
 
-module "secrets-manager-hault" {
+module "secrets-manager" {
   source             = "../../modules/secrets/hashicorp-vault"
   project_domain     = var.project_domain
   oidc_provider_arn  = module.eks.oidc_provider_arn

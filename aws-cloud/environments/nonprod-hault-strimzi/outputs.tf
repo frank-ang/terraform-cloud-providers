@@ -63,11 +63,11 @@ output "cert_manager_selfsigned_cluster_issuer" {
 }
 
 output "hault_address" {
-  value = module.secrets-manager-hault.hault_address
+  value = module.secrets-manager.hault_address
 }
 
 output "hault_root_ca_tls_name" {
-  value = module.secrets-manager-hault.hault_root_ca_tls_name
+  value = module.secrets-manager.hault_root_ca_tls_name
 }
 
 output "dummy_saml_idp_basic_auth_user" {

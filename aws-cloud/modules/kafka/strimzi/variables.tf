@@ -29,10 +29,6 @@ variable "kafka_init_sasl_scram_password" {
   type = string
 }
 
-variable "dependency" {
-  type = any
-}
-
 variable "kafka_mode" {
   type        = string
   description = "Authentication mode [ sasl-scram | mtls ]"
@@ -41,4 +37,8 @@ variable "kafka_mode" {
     condition     = contains(["mtls", "sasl-scram"], var.kafka_mode)
     error_message = "Invalid kafka mode."
   }
+}
+
+variable "dependency" {
+  type = any
 }

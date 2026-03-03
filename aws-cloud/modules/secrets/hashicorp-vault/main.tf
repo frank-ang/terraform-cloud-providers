@@ -147,7 +147,7 @@ server:
             leader_client_cert_file = "/vault/userconfig/${local.hault_tls_cert_name}/tls.crt"
             leader_client_key_file = "/vault/userconfig/${local.hault_tls_cert_name}/tls.key"
           }
-        } 
+        }
         seal "awskms" {
           region     = "${data.aws_region.current.region}"
           kms_key_id = "${aws_kms_key.hault.key_id}"
@@ -155,7 +155,7 @@ server:
 
   priorityClassName: "platform-support"
 
-EOT 
+EOT
   ]
 }
 
@@ -265,7 +265,7 @@ resource "aws_kms_key" "hault" {
   tags = {
     Name = "hault-kms-unseal-${random_pet.env.id}"
   }
-  # bypass_policy_lockout_safety_check to workaround MalformedPolicyDocumentException: 
+  # bypass_policy_lockout_safety_check to workaround MalformedPolicyDocumentException:
   #   The new key policy will not allow you to update the key policy in the future.
   bypass_policy_lockout_safety_check = true # Use with Caution.
   policy = jsonencode({

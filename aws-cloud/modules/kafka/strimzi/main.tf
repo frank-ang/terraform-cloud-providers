@@ -31,13 +31,12 @@ locals {
           name: ${local.kafka_init_username}
           key: password
   EOT
-  ca_cert                         = try(data.kubernetes_secret.cert_manager_root_ca.data["ca.crt"], null)
-  ca_key                          = try(data.kubernetes_secret.cert_manager_root_ca.data["tls.key"], null)
+  ca_cert                         = data.kubernetes_secret.cert_manager_root_ca.data["ca.crt"]
+  ca_key                          = data.kubernetes_secret.cert_manager_root_ca.data["tls.key"]
   strimzi_kafka_ssl_dir_path      = "/strimzi-kafka-certs"
   # implicit dependency
   dependency = jsonencode(var.dependency)
 }
-
 
 #### Strimzi Kafka ####
 # https://strimzi.io/quickstarts/
@@ -87,8 +86,7 @@ EOF
 resource "kubectl_manifest" "kafka_cluster" {
   depends_on = [
     kubectl_manifest.kafka_nodepool,
-    kubectl_manifest.kafka_broker_cert,
-    data.kubernetes_secret.cert_manager_root_ca
+    kubectl_manifest.kafka_broker_cert
   ]
   yaml_body = <<-EOF
 apiVersion: kafka.strimzi.io/v1beta2
@@ -219,7 +217,7 @@ spec:
         - CN=vault-kafka-init,OU=vault,O=Thought Machine Ltd,L=London,ST=Greater London,C=GB
 
   clientsCa:
-    generateCertificateAuthority: ${var.kafka_mode == "mtls" ? false : true}
+    generateCertificateAuthority: false
 
   zookeeper:
     replicas: 3
@@ -375,11 +373,16 @@ EOF
 
 # Shim to sync from cert manager CA
 data "kubernetes_secret" "cert_manager_root_ca" {
-  depends_on = [local.dependency, helm_release.strimzi]
+  depends_on = [local.dependency, time_sleep.strimzi_reconcile]
   metadata {
     name      = "kafka-root-ca-tls"
     namespace = "kafka"
   }
+}
+
+resource "time_sleep" "strimzi_reconcile" {
+  depends_on = [helm_release.strimzi]
+  create_duration = "60s" # Give the operator time to create the CA
 }
 
 # Overwrite the default strimzi client CA key.
